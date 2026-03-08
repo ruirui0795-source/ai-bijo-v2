@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Gravure Producer Pro</title>
+<style>
+    :root { --primary: #e91e63; --bg: #121212; --panel: #1e1e1e; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg); color: #eee; margin: 0; padding: 20px; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h2, h3 { color: var(--primary); margin-top: 0; }
+    label { display: block; margin: 15px 0 5px; font-size: 0.9rem; color: #bbb; }
+    select, input, button { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; }
+    .api-section { background: #252525; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--primary); }
+    button { background: var(--primary); border: none; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 20px; }
+    button:hover { background: #c2185b; transform: translateY(-2px); }
+    button:disabled { background: #555; cursor: not-allowed; }
+    img { width: 100%; border-radius: 8px; background: #111; min-height: 300px; object-fit: cover; }
+    .prompt-box { background: #000; padding: 15px; border-radius: 6px; font-size: 0.8rem; color: #0f0; min-height: 60px; border: 1px solid #333; }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="panel">
+        <h2>Producer Settings</h2>
+        
+        <div class="api-section">
+            <h3>🔑 API Configuration</h3>
+            <label>xAI (Grok) API Key</label>
+            <input type="password" id="grokKey" placeholder="xai-...">
+            <label>OpenAI (DALL-E) API Key</label>
+            <input type="password" id="openaiKey" placeholder="sk-...">
+            <p style="font-size:11px; color:#888;">※キーはブラウザにのみ保存され、外部には送信されません</p>
+        </div>
+
+        <label>1. モデル (100人から選択)</label>
+        <select id="modelSelect"></select>
+
+        <label>2. 服装・シチュエーション</label>
+        <select id="outfitSelect"></select>
+
+        <label>3. ロケーション</label>
+        <select id="locationSelect"></select>
+
+        <label>4. 撮影スタイル</label>
+        <select id="styleSelect"></select>
+
+        <button id="genBtn" onclick="runLure()">4Kリアル画像を生成する</button>
+        
+        <label>生成された呪文</label>
+        <div id="promptLog" class="prompt-box">Ready...</div>
+    </div>
+
+    <div class="panel">
+        <h2>Output Canvas</h2>
+        <img id="resultImg" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
+        <div id="statusUpdate" style="margin-top:10px; font-size:0.9rem; text-align:center;"></div>
+    </div>
+</div>
+
+<script>
+// --- さっきの美女100人、服装、場所のデータをここに流し込む ---
+const models = [
+    { name: "JP-01 王道清純ボブ", prompt: "Stunning Japanese woman, soft bob hair, pure aura, highly detailed skin texture" },
+    { name: "JP-50 究極の正統派美人", prompt: "Perfect Japanese beauty, long silky black hair, golden ratio face" },
+    { name: "KR-01 女神ヨシンモリ", prompt: "Korean top model, long wavy goddess hair, glamorous and elegant" },
+    { name: "KR-50 究極のヨシンモリ", prompt: "Ultimate Korean beauty, flawless wavy hair, pinnacle of perfection" }
+    // ※ここを前回の100人リストで上書きしてね
+];
+
+const outfits = [
+    { name: "CL-01 白ワンピ", prompt: "white cotton mini dress, clean and pure" },
+    { name: "CL-24 彼氏のシャツ", prompt: "oversized men's dress shirt only, casual" },
+    { name: "AD-02 濡れた質感", prompt: "wet skin with subtle condensation, highly realistic" }
+];
+
+const locations = [
+    { name: "LO-01 港区タワマン", prompt: "luxurious high-rise apartment in Tokyo, night view" },
+    { name: "LO-26 海辺の夕暮れ", prompt: "quiet beach at sunset, golden hour light" }
+];
+
+const styles = [
+    { name: "CM-01 プロ用単焦点", prompt: "shot on Sony A7R IV, 85mm f/1.8, bokeh" },
+    { name: "CM-03 スマホ撮り", prompt: "shot on iPhone 15 Pro, casual snapshot, authentic" }
+];
+
+// リストの読み込み
+function setup() {
+    const fill = (id, data) => {
+        const el = document.getElementById(id);
+        data.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.prompt; opt.textContent = d.name;
+            el.appendChild(opt);
+        });
+    };
+    fill('modelSelect', models);
+    fill('outfitSelect', outfits);
+    fill('locationSelect', locations);
+    fill('styleSelect', styles);
+}
+setup();
+
+async function runLure() {
+    const gKey = document.getElementById('grokKey').value;
+    const oKey = document.getElementById('openaiKey').value;
+    const btn = document.getElementById('genBtn');
+    
+    if(!gKey || !oKey) return alert('APIキーを入力してね');
+
+    btn.disabled = true;
+    document.getElementById('statusUpdate').innerText = "AIが欲望を解析中...";
+
+    try {
+        const base = `${document.getElementById('modelSelect').value}, ${document.getElementById('outfitSelect').value}, ${document.getElementById('locationSelect').value}, ${document.getElementById('styleSelect').value}`;
+        
+        // Grokで強化
+        const grokRes = await fetch('https://api.x.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gKey}` },
+            body: JSON.stringify({
+                model: "grok-beta",
+                messages: [{ role: "system", content: "Create a photorealistic image prompt. High detail, 8k." }, { role: "user", content: base }]
+            })
+        });
+        const grokData = await grokRes.json();
+        const finalPrompt = grokData.choices[0].message.content;
+        document.getElementById('promptLog').innerText = finalPrompt;
+
+        // DALL-E 3で画像化
+        document.getElementById('statusUpdate').innerText = "4K画像を錬成中...";
+        const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${oKey}` },
+            body: JSON.stringify({ model: "dall-e-3", prompt: finalPrompt, n: 1, size: "1024x1024" })
+        });
+        const imgData = await imgRes.json();
+        document.getElementById('resultImg').src = imgData.data[0].url;
+        document.getElementById('statusUpdate').innerText = "召喚完了";
+
+    } catch (e) {
+        alert("エラーが発生したよ。キーが正しいか確認してね");
+        console.error(e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+</body>
+</html>
